@@ -1,0 +1,56 @@
+{
+  "name": "kontext",
+  "version": "0.1.0",
+  "description": "Context engine for AI coding agents — semantic code search via CLI",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "ctx": "dist/cli/index.js",
+    "kontext": "dist/cli/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run lint && npm run test"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "context",
+    "semantic-search",
+    "code-search",
+    "cli",
+    "tree-sitter",
+    "embeddings"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AstrolightAI/kontext"
+  },
+  "dependencies": {
+    "commander": "^14.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "eslint": "^9.39.2",
+    "prettier": "^3.8.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.55.0",
+    "vitest": "^4.0.18"
+  }
+}
