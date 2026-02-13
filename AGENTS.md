@@ -6,12 +6,12 @@ Ship small, **modular**, **production-ready** changes with **high-signal context
 ## Commands (keep updated)
 > Put real, copy-pastable commands here. If missing, discover them in `README.md`, `package.json` scripts, `Makefile`, or `.github/workflows/*`.
 
-- Install deps: `<command>`
-- Lint: `<command>`
-- Typecheck: `<command>`
-- Unit tests: `<command>`
-- Integration/E2E tests: `<command>`
-- Full local check (closest to CI): `<command>`
+- Install deps: `npm install`
+- Lint: `npm run lint`
+- Typecheck: `npm run typecheck`
+- Unit tests: `npm run test`
+- Integration/E2E tests: `npm run test`
+- Full local check (closest to CI): `npm run check`
 
 ---
 
