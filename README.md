@@ -1,7 +1,7 @@
-# ctx — Context Engine for AI Coding Agents
+# ctx - Context Engine for AI Coding Agents
 
 > Give your AI coding agent deep understanding of any codebase.
-> No plugins, no MCP — just a CLI.
+> No plugins, no MCP - just a CLI.
 
 Any agent that can run bash can use `ctx`. Zero integration required.
 
@@ -17,7 +17,7 @@ ctx ask "how does the auth middleware validate tokens?"  # LLM-steered natural l
 
 AI coding agents are blind. They either read the whole codebase (blows context windows), rely on grep (misses semantic meaning), or need hand-crafted AGENTS.md files that don't scale.
 
-`ctx` fixes this. One command indexes your codebase into a local SQLite database. Every search combines **five strategies** — vector similarity, full-text, AST symbol lookup, path matching, and dependency tracing — then fuses the results with Reciprocal Rank Fusion.
+`ctx` fixes this. One command indexes your codebase into a local SQLite database. Every search combines **five strategies** - vector similarity, full-text, AST symbol lookup, path matching, and dependency tracing - then fuses the results with Reciprocal Rank Fusion.
 
 The result: your agent gets exactly the right files and line ranges, in milliseconds.
 
@@ -25,24 +25,26 @@ The result: your agent gets exactly the right files and line ranges, in millisec
 
 ## Features
 
-- **🔍 Semantic search** — vector embeddings via `all-MiniLM-L6-v2` (runs 100% locally)
-- **📝 Full-text search** — SQLite FTS5 with BM25 ranking
-- **🌳 AST-aware symbol lookup** — Tree-sitter parsing for functions, classes, types, imports
-- **📁 Path & dependency tracing** — glob matching + BFS dependency graph traversal
-- **🤖 LLM-steered queries** — Gemini / OpenAI / Anthropic turn natural language into precise multi-strategy search plans
-- **⚡ Incremental indexing** — SHA-256 hash comparison, only re-indexes changed files
-- **👁️ File watching** — `ctx watch` auto re-indexes on save
-- **🏠 100% local** — your code never leaves your machine (unless you opt into API embeddings)
+- **Multi-strategy search** - five search strategies fused with Reciprocal Rank Fusion (RRF)
+- **Semantic search** - vector embeddings via `all-MiniLM-L6-v2` (runs 100% locally)
+- **Full-text search** - SQLite FTS5 with BM25 ranking, sanitized query handling for special characters
+- **AST-aware symbol lookup** - Tree-sitter parsing for functions, classes, types, imports across 30+ languages
+- **Path and dependency tracing** - glob matching + BFS dependency graph traversal
+- **LLM-steered queries** - Gemini / OpenAI / Anthropic turn natural language into precise multi-strategy search plans
+- **Smart result ranking** - import deprioritization, test file penalty, small snippet penalty, file diversity, export/public API boost
+- **Incremental indexing** - SHA-256 hash comparison, only re-indexes changed files
+- **File watching** - `ctx watch` auto re-indexes on save
+- **100% local** - your code never leaves your machine (unless you opt into API embeddings or LLM steering)
 
 ---
 
 ## Installation
 
 ```bash
-npm install -g kontext
+npm install -g kontext-engine
 
 # Or run directly
-npx kontext init
+npx kontext-engine init
 ```
 
 Requires **Node.js 20+**.
@@ -56,7 +58,7 @@ Requires **Node.js 20+**.
 cd my-project
 ctx init
 
-# 2. Search (JSON output — perfect for agents)
+# 2. Search (JSON output - perfect for agents)
 ctx query "error handling"
 
 # 3. Search (human-readable text)
@@ -66,9 +68,51 @@ ctx query "error handling" -f text
 export CTX_GEMINI_KEY=your-key     # or CTX_OPENAI_KEY / CTX_ANTHROPIC_KEY
 ctx ask "how does the payment flow handle failed charges?"
 
-# 5. Watch mode — auto re-index on file changes
+# 5. Watch mode - auto re-index on file changes
 ctx watch
 ```
+
+---
+
+## Search Quality
+
+`ctx` goes beyond basic search fusion. Results are ranked through multiple passes to surface the most relevant code:
+
+### Reciprocal Rank Fusion (RRF)
+
+Results from all active strategies (vector, FTS, AST, path, dependency) are combined using RRF with K=60 and per-strategy weights. This produces a unified ranking without needing to normalize scores across different metrics.
+
+### Path Boosting
+
+Files whose path matches the query terms get a boost:
+- **1.5x** for directory name matches (e.g., querying "indexer" boosts files in `src/indexer/`)
+- **1.4x** for filename matches
+
+### Import Deprioritization
+
+Import blocks (import statements, require calls) receive a **0.5x penalty** when non-import results exist. This prevents import blocks from outranking actual implementations.
+
+### Test File Deprioritization
+
+Test files (`tests/`, `__tests__/`, `*.test.*`, `*.spec.*`) receive a **0.65x penalty** when non-test results exist. Test code is useful but rarely the primary answer to "how does X work?"
+
+### Small Snippet Penalty
+
+Results spanning only 1-3 lines (bare constants, trivial type aliases) get a mild penalty. A `const MAX_RETRIES = 3` should not outrank the retry logic itself.
+
+### File Diversity
+
+Diminishing returns per file prevent one file from dominating results:
+- 1st result from a file: 1.0x
+- 2nd result: 0.9x
+- 3rd result: 0.8x
+- 4th+: 0.7x
+
+This ensures results spread across the codebase, giving broader context.
+
+### Export Boost
+
+Exported/public API symbols get a mild boost over internal helpers. When you ask about "chunking", the exported `chunkFile()` function ranks higher than the private `canMerge()` helper.
 
 ---
 
@@ -83,7 +127,7 @@ ctx init                    # Index current directory
 ctx init ./my-project       # Index specific path
 ```
 
-Runs incrementally on subsequent calls — only processes changed files.
+Runs incrementally on subsequent calls - only processes changed files.
 
 ### `ctx query <query>`
 
@@ -102,10 +146,10 @@ ctx query "auth" --language typescript    # Filter by language
 | Flag | Description | Default |
 |---|---|---|
 | `-f, --format <fmt>` | Output format: `json` or `text` | `json` |
-| `-s, --strategy <list>` | Comma-separated: `vector,fts,ast,path` | `fts,ast` |
+| `-s, --strategy <list>` | Comma-separated: `vector,fts,ast,path` | `fts,ast,path` |
 | `-l, --limit <n>` | Maximum results | `10` |
 | `--language <lang>` | Filter by language | all |
-| `--no-vectors` | Skip vector search | — |
+| `--no-vectors` | Skip vector search | - |
 
 **JSON output (for agents):**
 
@@ -134,11 +178,11 @@ ctx query "auth" --language typescript    # Filter by language
 ```
 Query: "authentication"
 
-  src/middleware/auth.ts  L14–L89  (0.94)
+  src/middleware/auth.ts  L14-L89  (0.94)
   validateToken  [function]
   export async function validateToken(token: string) { ... }
 
-  src/routes/login.ts  L45–L112  (0.87)
+  src/routes/login.ts  L45-L112  (0.87)
   handleLogin  [function]
   ...
 
@@ -167,7 +211,7 @@ ctx ask "auth flow" -p openai                    # Force specific provider
 | `-f, --format <fmt>` | Output format: `json` or `text` | `text` |
 | `-l, --limit <n>` | Maximum results | `10` |
 | `-p, --provider <name>` | LLM provider: `gemini`, `openai`, `anthropic` | auto-detect |
-| `--no-explain` | Skip explanation, return raw search results | — |
+| `--no-explain` | Skip explanation, return raw search results | - |
 
 **Requires an API key** (set via environment variable):
 
@@ -177,11 +221,13 @@ export CTX_OPENAI_KEY=your-key       # GPT-4o-mini
 export CTX_ANTHROPIC_KEY=your-key    # Claude 3.5 Haiku
 ```
 
-Falls back to basic multi-strategy search if no API key is available.
+Falls back to keyword-based multi-strategy search if no API key is available. A warning is shown when no LLM provider is detected.
+
+**Natural language handling:** Queries like "how does the indexer work?" are automatically processed - stop words are stripped, code identifiers (camelCase, snake_case, dotted names like `fs.readFileSync`) are preserved, and the cleaned terms are used across all search strategies.
 
 ### `ctx watch [path]`
 
-Watch mode — monitors files and re-indexes automatically when you save.
+Watch mode - monitors files and re-indexes automatically when you save.
 
 ```bash
 ctx watch                     # Watch current directory
@@ -209,7 +255,7 @@ ctx status
 ```
 
 ```
-Kontext Status — /path/to/project
+Kontext Status - /path/to/project
 
   Initialized:  Yes
   Database:     .ctx/index.db (14.2 MB)
@@ -269,7 +315,7 @@ Configuration lives in `.ctx/config.json`, created automatically by `ctx init`.
   },
   "search": {
     "defaultLimit": 10,
-    "strategies": ["vector", "fts", "ast", "path"],
+    "strategies": ["fts", "ast", "path"],
     "weights": {
       "vector": 1.0,
       "fts": 0.8,
@@ -304,67 +350,71 @@ Configuration lives in `.ctx/config.json`, created automatically by `ctx init`.
 | `vector` | KNN cosine similarity on embeddings | Semantic/conceptual search |
 | `fts` | SQLite FTS5 full-text search with BM25 | Keyword/exact term search |
 | `ast` | Symbol name/type/parent matching | Finding specific functions, classes, types |
-| `path` | Glob-pattern file path matching | Finding files by name or directory |
+| `path` | Glob-pattern and keyword file path matching | Finding files by name or directory |
 | `dependency` | BFS traversal of import/require graph | Tracing what depends on what |
 
-Results from all strategies are fused using **Reciprocal Rank Fusion (RRF)** with K=60 and per-strategy weights.
+Default strategies are `fts,ast,path`. Vector search is opt-in (add `vector` to the strategy list or configure in `.ctx/config.json`). Dependency tracing runs when queries match dependency patterns.
+
+Results from all strategies are fused using **Reciprocal Rank Fusion (RRF)** with K=60 and per-strategy weights, then re-ranked with path boosting, import/test deprioritization, file diversity, and export boosting.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                         ctx CLI                          │
-├──────────┬──────────────┬───────────────┬───────────────┤
-│  Indexer  │ Search Engine │  Steering LLM  │  File Watcher │
-├──────────┴──────────────┴───────────────┴───────────────┤
-│                    Storage (SQLite)                       │
-└─────────────────────────────────────────────────────────┘
++-----------------------------------------------------------+
+|                         ctx CLI                           |
++-----------+--------------+---------------+----------------+
+|  Indexer  | Search Engine | Steering LLM | File Watcher   |
++-----------+--------------+---------------+----------------+
+|                    Storage (SQLite)                        |
++-----------------------------------------------------------+
 ```
 
 ### Indexing pipeline
 
 ```
-Source Files → Discovery → Tree-sitter AST → Logical Chunks → Embeddings → SQLite
-                 │              │                   │               │
-                 │              ├── functions        ├── chunk text  ├── vectors (sqlite-vec)
-                 │              ├── classes          ├── file path   ├── FTS5 index
-                 │              ├── imports          ├── line range  ├── AST metadata
-                 │              └── types            └── language    └── file hashes
-                 │
-                 ├── .gitignore / .ctxignore filtering
-                 └── 30+ language extensions
+Source Files -> Discovery -> Tree-sitter AST -> Logical Chunks -> Embeddings -> SQLite
+                 |              |                   |               |
+                 |              +-- functions        +-- chunk text  +-- vectors (sqlite-vec)
+                 |              +-- classes          +-- file path   +-- FTS5 index
+                 |              +-- imports          +-- line range  +-- AST metadata
+                 |              +-- types            +-- language    +-- file hashes
+                 |
+                 +-- .gitignore / .ctxignore filtering
+                 +-- 30+ language extensions
 ```
 
-1. **Discovery** — recursive file scan, respects `.gitignore` and `.ctxignore`, filters by 30+ language extensions
-2. **Parsing** — Tree-sitter extracts functions, classes, methods, types, imports, constants with line ranges and docstrings
-3. **Chunking** — splits files into logical code units (not arbitrary line windows). Functions stay whole. Related imports group together. Small constants merge.
-4. **Embedding** — `all-MiniLM-L6-v2` via ONNX Runtime (384-dimensional vectors, runs locally)
-5. **Storage** — SQLite with sqlite-vec for vector KNN, FTS5 for full-text, plus metadata tables
+1. **Discovery** - recursive file scan, respects `.gitignore` and `.ctxignore`, filters by 30+ language extensions
+2. **Parsing** - Tree-sitter extracts functions, classes, methods, types, imports, constants with line ranges and docstrings
+3. **Chunking** - splits files into logical code units (not arbitrary line windows). Functions stay whole. Related imports group together. Small constants merge.
+4. **Embedding** - `all-MiniLM-L6-v2` via ONNX Runtime (384-dimensional vectors, runs locally)
+5. **Storage** - SQLite with sqlite-vec for vector KNN, FTS5 for full-text, plus metadata tables
 
 ### Search pipeline
 
 ```
-Query → [Steering LLM] → Strategy Selection → Parallel Search → RRF Fusion → Ranked Results
-              │                    │
-              │                    ├── Vector similarity (KNN)
-              │                    ├── Full-text search (BM25)
-              │                    ├── AST symbol lookup
-              │                    ├── Path glob matching
-              │                    └── Dependency tracing (BFS)
-              │
-              └── Optional: interprets query, picks strategies,
+Query -> [Steering LLM] -> Strategy Selection -> Parallel Search -> RRF Fusion -> Re-ranking -> Results
+              |                    |                                                    |
+              |                    +-- Vector similarity (KNN)                          +-- Path boosting
+              |                    +-- Full-text search (BM25)                          +-- Import penalty
+              |                    +-- AST symbol lookup                                +-- Test file penalty
+              |                    +-- Path glob matching                               +-- Snippet penalty
+              |                    +-- Dependency tracing (BFS)                         +-- File diversity
+              |                                                                         +-- Export boost
+              |
+              +-- Optional: interprets query, picks strategies,
                   synthesizes explanation after search
 ```
 
 ### Key design decisions
 
-- **SQLite for everything** — vectors, FTS, metadata, all in one file (`.ctx/index.db`). Zero infrastructure.
-- **Tree-sitter for AST** — language-agnostic parsing via WebAssembly grammars. Supports TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, and more.
-- **Logical chunking** — chunks follow code structure (functions, classes, type blocks), not arbitrary line windows. This gives better search quality and more useful results.
-- **RRF fusion** — combines results from multiple strategies without needing to normalize scores across different metrics. Simple, effective, well-studied.
-- **Incremental by default** — SHA-256 content hashing means re-indexing only processes files that actually changed.
+- **SQLite for everything** - vectors, FTS, metadata, all in one file (`.ctx/index.db`). Zero infrastructure.
+- **Tree-sitter for AST** - language-agnostic parsing via WebAssembly grammars. Supports TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, and more.
+- **Logical chunking** - chunks follow code structure (functions, classes, type blocks), not arbitrary line windows. This gives better search quality and more useful results.
+- **RRF fusion** - combines results from multiple strategies without needing to normalize scores across different metrics. Simple, effective, well-studied.
+- **Multi-pass re-ranking** - after fusion, results go through path boosting, import/test/snippet deprioritization, file diversity balancing, and export boosting for consistently relevant output.
+- **Incremental by default** - SHA-256 content hashing means re-indexing only processes files that actually changed.
 
 ---
 
@@ -395,10 +445,10 @@ ctx query "authentication middleware" -f json
 ### Tips for agent integration
 
 - Always use `-f json` for machine-readable output
-- Use `-s fts,ast` for fast, embedding-free search
+- Default strategies (`fts,ast,path`) work great without embeddings
 - Use `ctx ask` when the query is natural language and an LLM key is available
 - Run `ctx init` once, then `ctx watch` in the background to keep the index fresh
-- The index is stored in `.ctx/` — add it to `.gitignore` (done automatically by `ctx init`)
+- The index is stored in `.ctx/` - add it to `.gitignore` (done automatically by `ctx init`)
 
 ### Works with
 
@@ -406,7 +456,8 @@ ctx query "authentication middleware" -f json
 - **Claude Code** (Anthropic)
 - **Cursor** (AI IDE)
 - **Aider** (terminal)
-- **lxt** (coding agent)
+- **Windsurf** (AI IDE)
+- **LXT** (coding agent)
 - Any tool that can execute shell commands
 
 ---
@@ -421,13 +472,13 @@ TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, C#, Ruby, PHP, Swift, Ko
 
 ```
 src/
-├── cli/            # CLI commands (init, query, ask, watch, status, config)
-├── indexer/        # File discovery, Tree-sitter parsing, chunking, embedding
-├── search/         # Vector, FTS, AST, path, dependency search + RRF fusion
-├── steering/       # LLM integration (Gemini, OpenAI, Anthropic)
-├── storage/        # SQLite database, sqlite-vec vectors
-├── watcher/        # File watching with chokidar
-└── utils/          # Error handling, logging
+  cli/            # CLI commands (init, query, ask, watch, status, config)
+  indexer/        # File discovery, Tree-sitter parsing, chunking, embedding
+  search/         # Vector, FTS, AST, path, dependency search + RRF fusion + re-ranking
+  steering/       # LLM integration and prompts (Gemini, OpenAI, Anthropic)
+  storage/        # SQLite database, sqlite-vec vectors
+  watcher/        # File watching with chokidar
+  utils/          # Error handling, logging
 ```
 
 ---
@@ -435,13 +486,14 @@ src/
 ## Development
 
 ```bash
-git clone https://github.com/example/kontext.git
-cd kontext
+git clone https://github.com/LuciferMornens/context-engine.git
+cd context-engine
 npm install
 npm run build         # Build with tsup
-npm run test          # Run tests (vitest)
+npm run test          # Run tests (vitest) - 369 tests
 npm run lint          # Lint (eslint)
 npm run typecheck     # Type check (tsc --noEmit)
+npm run check         # All of the above
 ```
 
 ---
