@@ -3,7 +3,7 @@
   "version": "0.1.6",
   "description": "Context engine for AI coding agents — semantic code search via CLI",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bin": {
     "ctx": "dist/cli/index.js",
     "kontext": "dist/cli/index.js",

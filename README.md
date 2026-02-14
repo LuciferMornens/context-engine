@@ -535,4 +535,4 @@ npm run check         # All of the above
 
 ## License
 
-MIT
+Apache 2.0 - See [LICENSE](LICENSE) for details.
