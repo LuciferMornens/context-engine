@@ -75,6 +75,14 @@ export interface ChunkWithFile {
   text: string;
 }
 
+export interface ChunkSearchFilters {
+  name?: string;
+  nameMode?: "exact" | "prefix" | "contains";
+  type?: string;
+  parent?: string;
+  language?: string;
+}
+
 export interface FTSResult {
   chunkId: number;
   name: string | null;
@@ -97,6 +105,9 @@ export interface KontextDatabase {
   // Vectors
   insertVector(chunkId: number, vector: Float32Array): void;
   searchVectors(query: Float32Array, limit: number): VectorResult[];
+
+  // AST / structured search
+  searchChunks(filters: ChunkSearchFilters, limit: number): ChunkWithFile[];
 
   // FTS
   searchFTS(query: string, limit: number): FTSResult[];
@@ -296,6 +307,59 @@ export function createDatabase(
         )
         .all(...ids) as ChunkWithFile[];
       return rows;
+    },
+
+    searchChunks(filters: ChunkSearchFilters, limit: number): ChunkWithFile[] {
+      const conditions: string[] = [];
+      const params: unknown[] = [];
+
+      if (filters.name) {
+        switch (filters.nameMode ?? "contains") {
+          case "exact":
+            conditions.push("c.name = ?");
+            params.push(filters.name);
+            break;
+          case "prefix":
+            conditions.push("c.name LIKE ? || '%'");
+            params.push(filters.name);
+            break;
+          case "contains":
+            conditions.push("c.name LIKE '%' || ? || '%'");
+            params.push(filters.name);
+            break;
+        }
+      }
+
+      if (filters.type) {
+        conditions.push("c.type = ?");
+        params.push(filters.type);
+      }
+
+      if (filters.parent) {
+        conditions.push("c.parent = ?");
+        params.push(filters.parent);
+      }
+
+      if (filters.language) {
+        conditions.push("f.language = ?");
+        params.push(filters.language);
+      }
+
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const sql = `
+        SELECT c.id, c.file_id as fileId, f.path as filePath, f.language,
+               c.line_start as lineStart, c.line_end as lineEnd,
+               c.type, c.name, c.parent, c.text
+        FROM chunks c
+        JOIN files f ON f.id = c.file_id
+        ${where}
+        ORDER BY c.name, c.line_start
+        LIMIT ?
+      `;
+
+      params.push(limit);
+      return db.prepare(sql).all(...params) as ChunkWithFile[];
     },
 
     deleteChunksByFile(fileId: number): void {
