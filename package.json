@@ -44,6 +44,7 @@
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
     "better-sqlite3": "^12.6.2",
+    "chokidar": "^5.0.0",
     "commander": "^14.0.3",
     "ignore": "^7.0.5",
     "sqlite-vec": "^0.1.7-alpha.2",
@@ -52,6 +53,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "@types/chokidar": "^1.7.5",
     "@types/node": "^25.2.3",
     "eslint": "^9.39.2",
     "prettier": "^3.8.1",
