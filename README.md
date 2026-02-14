@@ -217,8 +217,8 @@ ctx ask "auth flow" -p openai                    # Force specific provider
 **Requires an API key** (set via environment variable):
 
 ```bash
-export CTX_GEMINI_KEY=your-key       # Gemini 2.0 Flash (cheapest)
-export CTX_OPENAI_KEY=your-key       # GPT-4o-mini
+export CTX_GEMINI_KEY=your-key       # Gemini 3 Flash (cheapest)
+export CTX_OPENAI_KEY=your-key       # GPT-5-mini
 export CTX_ANTHROPIC_KEY=your-key    # Claude 3.5 Haiku
 ```
 
