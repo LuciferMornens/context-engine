@@ -9,8 +9,17 @@
     "kontext": "dist/cli/index.js"
   },
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsup",
@@ -40,6 +49,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/AstrolightAI/kontext"
+  },
+  "homepage": "https://github.com/AstrolightAI/kontext#readme",
+  "bugs": {
+    "url": "https://github.com/AstrolightAI/kontext/issues"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",

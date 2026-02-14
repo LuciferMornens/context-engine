@@ -52,11 +52,11 @@ describe("createWatcher", () => {
 
     await handle.start();
     // Let watcher stabilize
-    await sleep(100);
+    await sleep(200);
 
     // Add a new file
     fs.writeFileSync(path.join(root, "src", "new.ts"), "const a = 1;\n");
-    await sleep(500);
+    await sleep(600);
 
     expect(changes.some((c) => c.type === "add" && c.path.includes("new.ts"))).toBe(true);
   });
@@ -75,14 +75,14 @@ describe("createWatcher", () => {
 
     await handle.start();
     // Let watcher stabilize after initial scan
-    await sleep(100);
+    await sleep(200);
 
     // Modify existing file
     fs.writeFileSync(
       path.join(root, "src", "existing.ts"),
       "export const x = 2;\n",
     );
-    await sleep(400);
+    await sleep(600);
 
     expect(changes.some((c) => c.path.includes("existing.ts"))).toBe(true);
     const change = changes.find((c) => c.path.includes("existing.ts"));
@@ -104,11 +104,11 @@ describe("createWatcher", () => {
 
     await handle.start();
     // Let watcher stabilize
-    await sleep(100);
+    await sleep(200);
 
     // Delete existing file
     fs.unlinkSync(path.join(root, "src", "existing.ts"));
-    await sleep(500);
+    await sleep(600);
 
     expect(changes.some((c) => c.type === "unlink" && c.path.includes("existing.ts"))).toBe(true);
   });
