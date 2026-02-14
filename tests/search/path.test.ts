@@ -270,6 +270,85 @@ describe("pathKeywordSearch", () => {
 
     expect(results).toEqual([]);
   });
+
+  it("returns representative matches across files before extra chunks from one file", () => {
+    const cliCommandsFile = db.upsertFile({
+      path: "src/cli/commands/ask.ts",
+      language: "typescript",
+      hash: "h-cli-ask",
+      size: 1000,
+    });
+    const cliIndexFile = db.upsertFile({
+      path: "src/cli/index.ts",
+      language: "typescript",
+      hash: "h-cli-index",
+      size: 200,
+    });
+
+    db.insertChunks(cliCommandsFile, [
+      {
+        lineStart: 1,
+        lineEnd: 3,
+        type: "function",
+        name: "a1",
+        parent: null,
+        text: "export function a1() {}",
+        imports: [],
+        exports: true,
+        hash: "hca1",
+      },
+      {
+        lineStart: 5,
+        lineEnd: 7,
+        type: "function",
+        name: "a2",
+        parent: null,
+        text: "export function a2() {}",
+        imports: [],
+        exports: true,
+        hash: "hca2",
+      },
+      {
+        lineStart: 9,
+        lineEnd: 11,
+        type: "function",
+        name: "a3",
+        parent: null,
+        text: "export function a3() {}",
+        imports: [],
+        exports: true,
+        hash: "hca3",
+      },
+      {
+        lineStart: 13,
+        lineEnd: 15,
+        type: "function",
+        name: "a4",
+        parent: null,
+        text: "export function a4() {}",
+        imports: [],
+        exports: true,
+        hash: "hca4",
+      },
+    ]);
+
+    db.insertChunks(cliIndexFile, [{
+      lineStart: 1,
+      lineEnd: 3,
+      type: "constant",
+      name: "program",
+      parent: null,
+      text: "const program = new Command();",
+      imports: [],
+      exports: false,
+      hash: "hci1",
+    }]);
+
+    const results = pathKeywordSearch(db, "cli entry point index", 3);
+
+    const files = results.map((r) => r.filePath);
+    expect(files).toContain("src/cli/index.ts");
+  });
 });
 
 // ── dependencyTrace tests ────────────────────────────────────────────────────

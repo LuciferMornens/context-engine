@@ -43,6 +43,19 @@ describe("package build", () => {
     expect(output).toContain("config");
   });
 
+  it("find command uses query command options (alias)", () => {
+    const output = execSync("node dist/cli/index.js find --help", {
+      cwd: ROOT,
+      encoding: "utf-8",
+    });
+    expect(output).toContain("Multi-strategy code search");
+    expect(output).toContain("--strategy");
+    expect(output).toContain("--no-vectors");
+    expect(output).toContain("--format");
+    expect(output).not.toContain("--no-llm");
+    expect(output).not.toContain("--full");
+  });
+
   it("CLI --version outputs version", () => {
     const output = execSync("node dist/cli/index.js --version", {
       cwd: ROOT,

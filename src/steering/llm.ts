@@ -226,6 +226,11 @@ const CODE_IDENT_RE = /^(?:[a-z]+(?:[A-Z][a-z]*)+|[A-Z][a-zA-Z]+|[a-z]+(?:_[a-z]
 /** Pattern: dotted module paths like "fs.readFileSync" or "path.join". */
 const DOTTED_IDENT_RE = /[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+/g;
 
+const TERM_VARIANTS: Record<string, string[]> = {
+  configuration: ["config"],
+  configurations: ["config"],
+};
+
 /**
  * Extract meaningful search terms from a natural language query.
  *
@@ -239,6 +244,7 @@ const DOTTED_IDENT_RE = /[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+/g;
 export function extractSearchTerms(query: string): string {
   const terms: string[] = [];
   const seen = new Set<string>();
+  const queryLower = query.toLowerCase();
 
   const addUnique = (term: string): void => {
     const key = term.toLowerCase();
@@ -248,13 +254,22 @@ export function extractSearchTerms(query: string): string {
     }
   };
 
+  const addTermAndVariants = (term: string): void => {
+    addUnique(term);
+    const lower = term.toLowerCase();
+
+    for (const variant of TERM_VARIANTS[lower] ?? []) {
+      addUnique(variant);
+    }
+  };
+
   // 1. Extract dotted identifiers before they get split (e.g. "fs.readFileSync")
   const dottedMatches = query.match(DOTTED_IDENT_RE) ?? [];
-  for (const m of dottedMatches) addUnique(m);
+  for (const m of dottedMatches) addTermAndVariants(m);
 
   // 2. Extract path-like tokens (contain "/")
   const pathTokens = query.split(/\s+/).filter((t) => t.includes("/"));
-  for (const p of pathTokens) addUnique(p.replace(/[?!,;]+$/g, ""));
+  for (const p of pathTokens) addTermAndVariants(p.replace(/[?!,;]+$/g, ""));
 
   // 3. Tokenise the rest: replace special chars (but keep _ for identifiers) and split
   const words = query
@@ -268,10 +283,16 @@ export function extractSearchTerms(query: string): string {
     if (seen.has(lower)) continue;
     // Skip stop words — but only when the token is NOT a code identifier
     if (STOP_WORDS.has(lower) && !CODE_IDENT_RE.test(w)) continue;
-    addUnique(w);
+    addTermAndVariants(w);
   }
 
-  // 4. Fallback: if everything was filtered, take the longest original word
+  // 4. Phrase-level fallback variants for common code-search intents.
+  // "entry point" queries often target index/bootstrap files.
+  if (queryLower.includes("entry point") || queryLower.includes("entrypoint")) {
+    addUnique("index");
+  }
+
+  // 5. Fallback: if everything was filtered, take the longest original word
   if (terms.length === 0) {
     const allWords = query
       .replace(/[^a-zA-Z0-9_\s]/g, " ")

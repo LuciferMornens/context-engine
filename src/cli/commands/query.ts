@@ -253,6 +253,7 @@ async function loadEmbedder(): Promise<Embedder> {
 export function registerQueryCommand(program: Command): void {
   program
     .command("query <query>")
+    .alias("find")
     .description("Multi-strategy code search")
     .option("-l, --limit <n>", "Max results", "10")
     .option(

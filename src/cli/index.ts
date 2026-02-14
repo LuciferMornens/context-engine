@@ -2,7 +2,6 @@ import { Command } from "commander";
 import { registerInitCommand } from "./commands/init.js";
 import { registerQueryCommand } from "./commands/query.js";
 import { registerAskCommand } from "./commands/ask.js";
-import { registerFindCommand } from "./commands/find.js";
 import { registerUpdateCommand } from "./commands/update.js";
 import { registerWatchCommand } from "./commands/watch.js";
 import { registerStatusCommand } from "./commands/status.js";
@@ -23,7 +22,6 @@ program
 registerInitCommand(program);
 registerQueryCommand(program);
 registerAskCommand(program);
-registerFindCommand(program);
 registerUpdateCommand(program);
 registerWatchCommand(program);
 registerStatusCommand(program);

@@ -440,4 +440,16 @@ describe("extractSearchTerms", () => {
     const result = extractSearchTerms("where is AuthService");
     expect(result).toContain("AuthService");
   });
+
+  it("adds config variant for configuration-like terms", () => {
+    const result = extractSearchTerms("what files handle configuration?");
+    expect(result.toLowerCase()).toContain("configuration");
+    expect(result.toLowerCase()).toContain("config");
+  });
+
+  it("adds index variant for entry point queries", () => {
+    const result = extractSearchTerms("show me the CLI entry point");
+    expect(result).toContain("CLI");
+    expect(result.toLowerCase()).toContain("index");
+  });
 });

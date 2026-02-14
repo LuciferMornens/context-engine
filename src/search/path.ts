@@ -135,32 +135,81 @@ export function pathKeywordSearch(
   // Sort by score descending
   scoredPaths.sort((a, b) => b.score - a.score);
 
-  // Collect chunks from matched files, respecting limit
-  const results: SearchResult[] = [];
+  // Load matched files/chunks first.
+  const matchedFiles: {
+    filePath: string;
+    language: string;
+    score: number;
+    chunks: ReturnType<KontextDatabase["getChunksByFile"]>;
+  }[] = [];
 
   for (const { filePath, score } of scoredPaths) {
-    if (results.length >= limit) break;
-
     const file = db.getFile(filePath);
     if (!file) continue;
 
     const chunks = db.getChunksByFile(file.id);
-    for (const chunk of chunks) {
-      if (results.length >= limit) break;
+    if (chunks.length === 0) continue;
 
-      results.push({
-        chunkId: chunk.id,
-        filePath: file.path,
-        lineStart: chunk.lineStart,
-        lineEnd: chunk.lineEnd,
-        name: chunk.name,
-        type: chunk.type,
-        exported: chunk.exports,
-        text: chunk.text,
-        score,
-        language: file.language,
-      });
+    matchedFiles.push({
+      filePath: file.path,
+      language: file.language,
+      score,
+      chunks,
+    });
+  }
+
+  if (matchedFiles.length === 0) return [];
+
+  // Collect chunks from matched files, respecting limit.
+  // First pass: one representative chunk per file to avoid one large file
+  // crowding out other relevant files for broad terms like "cli".
+  const results: SearchResult[] = [];
+  const pushChunk = (
+    filePath: string,
+    language: string,
+    score: number,
+    chunk: ReturnType<KontextDatabase["getChunksByFile"]>[number],
+  ): void => {
+    results.push({
+      chunkId: chunk.id,
+      filePath,
+      lineStart: chunk.lineStart,
+      lineEnd: chunk.lineEnd,
+      name: chunk.name,
+      type: chunk.type,
+      exported: chunk.exports,
+      text: chunk.text,
+      score,
+      language,
+    });
+  };
+
+  for (const matched of matchedFiles) {
+    if (results.length >= limit) break;
+    pushChunk(
+      matched.filePath,
+      matched.language,
+      matched.score,
+      matched.chunks[0],
+    );
+  }
+
+  // Second pass: add remaining chunks in round-robin order.
+  let offset = 1;
+  while (results.length < limit) {
+    let addedInRound = false;
+
+    for (const matched of matchedFiles) {
+      if (results.length >= limit) break;
+      const chunk = matched.chunks[offset];
+      if (!chunk) continue;
+
+      pushChunk(matched.filePath, matched.language, matched.score, chunk);
+      addedInRound = true;
     }
+
+    if (!addedInRound) break;
+    offset++;
   }
 
   return results;
