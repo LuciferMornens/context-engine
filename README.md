@@ -487,12 +487,12 @@ ctx query "authentication middleware" -f json
 
 ### Works with
 
-- **OpenAI Codex** (CLI)
-- **Claude Code** (Anthropic)
-- **Cursor** (AI IDE)
-- **Aider** (terminal)
-- **Windsurf** (AI IDE)
-- **LXT** (coding agent)
+- **OpenAI Codex CLI**
+- **Claude Code**
+- **Cursor**
+- **Amp**
+- **Code Factory**
+- **Droid**
 - Any tool that can execute shell commands
 
 ---
