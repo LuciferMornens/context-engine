@@ -45,7 +45,7 @@ export type SearchExecutor = (
 
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_URL = "https://api.openai.com/v1/responses";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
 const PLAN_SYSTEM_PROMPT = `You are a code search strategy planner. Given a user query about code, output a JSON object with:
@@ -123,21 +123,28 @@ export function createOpenAIProvider(apiKey: string): LLMProvider {
   return {
     name: "openai",
     async chat(messages: ChatMessage[]): Promise<string> {
+      const systemMessage = messages.find((m) => m.role === "system");
+      const userMessages = messages.filter((m) => m.role !== "system");
+      const userInput = userMessages.map((m) => m.content).join("\n\n");
+
+      const body: Record<string, unknown> = {
+        model: "gpt-5-mini",
+        input: userInput,
+        max_output_tokens: 6000,
+        reasoning: { effort: "low" },
+      };
+
+      if (systemMessage) {
+        body["instructions"] = systemMessage.content;
+      }
+
       const response = await fetch(OPENAI_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({
-          model: "gpt-5-mini",
-          messages: messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          temperature: 0.1,
-          max_completion_tokens: 6000,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -145,11 +152,9 @@ export function createOpenAIProvider(apiKey: string): LLMProvider {
         throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
       }
 
-      const data = (await response.json()) as {
-        choices: { message: { content: string } }[];
-      };
+      const data = (await response.json()) as { output_text: string };
 
-      return data.choices[0].message.content;
+      return data.output_text;
     },
   };
 }

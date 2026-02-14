@@ -106,14 +106,15 @@ describe("createOpenAIProvider", () => {
     expect(provider.name).toBe("openai");
   });
 
-  it("makes correct API call", async () => {
+  it("makes correct API call using Responses API", async () => {
     mockFetch({
-      choices: [{ message: { content: "Hello from OpenAI" } }],
-      usage: { total_tokens: 42 },
+      output_text: "Hello from OpenAI",
+      usage: { input_tokens: 10, output_tokens: 32 },
     });
 
     const provider = createOpenAIProvider("test-key");
     const result = await provider.chat([
+      { role: "system", content: "You are helpful." },
       { role: "user", content: "Hello" },
     ]);
 
@@ -121,15 +122,39 @@ describe("createOpenAIProvider", () => {
     expect(globalThis.fetch).toHaveBeenCalledOnce();
 
     const [url, opts] = vi.mocked(globalThis.fetch).mock.calls[0];
-    expect(url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(url).toBe("https://api.openai.com/v1/responses");
     expect(opts?.method).toBe("POST");
 
     const headers = opts?.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe("Bearer test-key");
 
-    const body = JSON.parse(opts?.body as string);
-    expect(body.model).toBe("gpt-5-mini");
-    expect(body.messages).toHaveLength(1);
+    const body = JSON.parse(opts?.body as string) as Record<string, unknown>;
+    expect(body["model"]).toBe("gpt-5-mini");
+    // Responses API uses instructions + input, not messages
+    expect(body["instructions"]).toBe("You are helpful.");
+    expect(body["input"]).toBe("Hello");
+    // No temperature — reasoning model rejects it
+    expect(body).not.toHaveProperty("temperature");
+    expect(body).not.toHaveProperty("top_p");
+    // Uses max_output_tokens, not max_completion_tokens
+    expect(body["max_output_tokens"]).toBe(6000);
+    // Reasoning effort
+    expect(body["reasoning"]).toEqual({ effort: "low" });
+  });
+
+  it("sends user-only message without instructions", async () => {
+    mockFetch({
+      output_text: "Response",
+      usage: { input_tokens: 5, output_tokens: 10 },
+    });
+
+    const provider = createOpenAIProvider("test-key");
+    await provider.chat([{ role: "user", content: "Hello" }]);
+
+    const [, opts] = vi.mocked(globalThis.fetch).mock.calls[0];
+    const body = JSON.parse(opts?.body as string) as Record<string, unknown>;
+    expect(body["instructions"]).toBeUndefined();
+    expect(body["input"]).toBe("Hello");
   });
 
   it("throws on API error", async () => {
