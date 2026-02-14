@@ -362,29 +362,21 @@ Results from all strategies are fused using **Reciprocal Rank Fusion (RRF)** wit
 
 ## Architecture
 
-```
-+-----------------------------------------------------------+
-|                         ctx CLI                           |
-+-----------+--------------+---------------+----------------+
-|  Indexer  | Search Engine | Steering LLM | File Watcher   |
-+-----------+--------------+---------------+----------------+
-|                    Storage (SQLite)                        |
-+-----------------------------------------------------------+
-```
+| Layer | Components |
+|---|---|
+| **CLI** | `ctx init` / `ctx query` / `ctx ask` / `ctx watch` / `ctx status` / `ctx config` |
+| **Engine** | Indexer - Search Engine - Steering LLM - File Watcher |
+| **Storage** | SQLite (sqlite-vec vectors + FTS5 full-text + metadata) |
 
 ### Indexing pipeline
 
-```
-Source Files -> Discovery -> Tree-sitter AST -> Logical Chunks -> Embeddings -> SQLite
-                 |              |                   |               |
-                 |              +-- functions        +-- chunk text  +-- vectors (sqlite-vec)
-                 |              +-- classes          +-- file path   +-- FTS5 index
-                 |              +-- imports          +-- line range  +-- AST metadata
-                 |              +-- types            +-- language    +-- file hashes
-                 |
-                 +-- .gitignore / .ctxignore filtering
-                 +-- 30+ language extensions
-```
+| Stage | What it does | Output |
+|---|---|---|
+| **Discovery** | Recursive file scan, respects `.gitignore` / `.ctxignore`, 30+ language extensions | File list |
+| **Parsing** | Tree-sitter extracts functions, classes, methods, types, imports, constants | AST nodes with line ranges |
+| **Chunking** | Groups nodes into logical code units, merges small chunks, keeps functions whole | Chunks with metadata |
+| **Embedding** | `all-MiniLM-L6-v2` via ONNX Runtime (384-dim vectors, runs locally) | Vector embeddings |
+| **Storage** | Writes to SQLite: sqlite-vec for KNN, FTS5 for full-text, plus file hashes | `.ctx/index.db` |
 
 1. **Discovery** - recursive file scan, respects `.gitignore` and `.ctxignore`, filters by 30+ language extensions
 2. **Parsing** - Tree-sitter extracts functions, classes, methods, types, imports, constants with line ranges and docstrings
@@ -394,19 +386,14 @@ Source Files -> Discovery -> Tree-sitter AST -> Logical Chunks -> Embeddings -> 
 
 ### Search pipeline
 
-```
-Query -> [Steering LLM] -> Strategy Selection -> Parallel Search -> RRF Fusion -> Re-ranking -> Results
-              |                    |                                                    |
-              |                    +-- Vector similarity (KNN)                          +-- Path boosting
-              |                    +-- Full-text search (BM25)                          +-- Import penalty
-              |                    +-- AST symbol lookup                                +-- Test file penalty
-              |                    +-- Path glob matching                               +-- Snippet penalty
-              |                    +-- Dependency tracing (BFS)                         +-- File diversity
-              |                                                                         +-- Export boost
-              |
-              +-- Optional: interprets query, picks strategies,
-                  synthesizes explanation after search
-```
+| Step | Description |
+|---|---|
+| **1. Query input** | Raw user query (natural language or code terms) |
+| **2. Steering (optional)** | LLM interprets query, selects strategies, optimizes search terms |
+| **3. Parallel search** | Runs selected strategies simultaneously: Vector (KNN), FTS (BM25), AST (symbol lookup), Path (glob/keyword), Dependency (BFS) |
+| **4. RRF Fusion** | Reciprocal Rank Fusion combines results across strategies (K=60, per-strategy weights) |
+| **5. Re-ranking** | Path boosting, import penalty, test file penalty, snippet penalty, file diversity, export boost |
+| **6. Synthesis (optional)** | LLM generates a concise explanation referencing specific files and line numbers |
 
 ### Key design decisions
 
