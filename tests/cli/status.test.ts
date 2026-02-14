@@ -106,7 +106,7 @@ describe("ctx status", () => {
     const output = await runStatus(root);
 
     expect(output.config).toBeDefined();
-    expect(output.config?.model).toBe("all-MiniLM-L6-v2");
+    expect(output.config?.model).toBe("Xenova/all-MiniLM-L6-v2");
     expect(output.config?.dimensions).toBe(384);
   });
 

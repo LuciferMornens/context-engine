@@ -12,6 +12,7 @@ import { IndexError, ErrorCode } from "../../utils/errors.js";
 import { handleCommandError } from "../../utils/error-boundary.js";
 import { createLogger, LogLevel } from "../../utils/logger.js";
 import { createDatabase } from "../../storage/db.js";
+import { DEFAULT_CONFIG } from "./config.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,12 +62,10 @@ function ensureConfig(ctxDir: string): void {
   const configPath = path.join(ctxDir, CONFIG_FILENAME);
   if (fs.existsSync(configPath)) return;
 
-  const config = {
-    version: 1,
-    dimensions: 384,
-    model: "all-MiniLM-L6-v2",
-  };
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n",
+  );
 }
 
 // ── Format helpers ───────────────────────────────────────────────────────────

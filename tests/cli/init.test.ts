@@ -91,7 +91,7 @@ describe("ctx init", () => {
     expect(fs.existsSync(configPath)).toBe(true);
 
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>;
-    expect(config["version"]).toBeDefined();
+    expect(config["embedder"]).toBeDefined();
   });
 
   it("adds .ctx/ to .gitignore when .gitignore exists", async () => {

@@ -316,7 +316,7 @@ Configuration lives in `.ctx/config.json`, created automatically by `ctx init`.
   },
   "search": {
     "defaultLimit": 10,
-    "strategies": ["fts", "ast", "path"],
+    "strategies": ["vector", "fts", "ast", "path"],
     "weights": {
       "vector": 1.0,
       "fts": 0.8,

@@ -56,10 +56,18 @@ function readConfig(ctxDir: string): ProjectConfig | null {
 
   try {
     const raw = fs.readFileSync(configPath, "utf-8");
-    const parsed = JSON.parse(raw) as { model?: string; dimensions?: number };
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    // Support both new (embedder.model) and legacy (model) config formats
+    const embedder = parsed.embedder as
+      | { model?: string; dimensions?: number }
+      | undefined;
     return {
-      model: parsed.model ?? "unknown",
-      dimensions: parsed.dimensions ?? 0,
+      model:
+        embedder?.model ?? (parsed.model as string | undefined) ?? "unknown",
+      dimensions:
+        embedder?.dimensions ??
+        (parsed.dimensions as number | undefined) ??
+        0,
     };
   } catch {
     return null;
