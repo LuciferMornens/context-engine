@@ -7,7 +7,7 @@ import { vectorSearch } from "../../search/vector.js";
 import { ftsSearch } from "../../search/fts.js";
 import { astSearch } from "../../search/ast.js";
 import { pathSearch, pathKeywordSearch } from "../../search/path.js";
-import { fusionMerge } from "../../search/fusion.js";
+import { fusionMergeWithPathBoost, extractPathBoostTerms } from "../../search/fusion.js";
 import { KontextError, SearchError, ErrorCode } from "../../utils/errors.js";
 import { handleCommandError } from "../../utils/error-boundary.js";
 import { createLogger, LogLevel } from "../../utils/logger.js";
@@ -175,7 +175,9 @@ function formatTextOutput(output: AskOutput): string {
 
 // ── Search executor factory ──────────────────────────────────────────────────
 
-function createSearchExecutor(db: KontextDatabase): SearchExecutor {
+function createSearchExecutor(db: KontextDatabase, query: string): SearchExecutor {
+  const pathBoostTerms = extractPathBoostTerms(query);
+
   return async (strategies: StrategyPlan[], limit: number): Promise<SearchResult[]> => {
     const strategyResults: StrategyResult[] = [];
     const fetchLimit = limit * 3;
@@ -191,7 +193,7 @@ function createSearchExecutor(db: KontextDatabase): SearchExecutor {
       }
     }
 
-    return fusionMerge(strategyResults, limit);
+    return fusionMergeWithPathBoost(strategyResults, limit, pathBoostTerms);
   };
 }
 
@@ -263,7 +265,7 @@ async function fallbackSearch(
   query: string,
   limit: number,
 ): Promise<AskOutput> {
-  const executor = createSearchExecutor(db);
+  const executor = createSearchExecutor(db, query);
   const keywords = extractSearchTerms(query);
   const fallbackStrategies: StrategyPlan[] = [
     { strategy: "fts", query: keywords, weight: 0.8, reason: "fallback keyword search" },
@@ -320,7 +322,7 @@ export async function runAsk(
       return output;
     }
 
-    const executor = createSearchExecutor(db);
+    const executor = createSearchExecutor(db, query);
 
     if (options.noExplain) {
       return await runNoExplain(provider, query, options, executor);

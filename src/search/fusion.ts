@@ -71,6 +71,16 @@ const PATH_BOOST_PARTIAL = 1.2;
 
 const IMPORT_PENALTY = 0.5;
 
+// ── Path boost term extraction ───────────────────────────────────────────────
+
+/** Extract terms from a query for path-based boosting. Splits on whitespace and drops short tokens. */
+export function extractPathBoostTerms(query: string): string[] {
+  return query
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+}
+
 // ── Fusion with path boost + import deprioritization ─────────────────────────
 
 /**

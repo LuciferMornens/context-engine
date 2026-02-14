@@ -10,7 +10,7 @@ import { KontextError, SearchError, ErrorCode } from "../../utils/errors.js";
 import { handleCommandError } from "../../utils/error-boundary.js";
 import { createLogger, LogLevel } from "../../utils/logger.js";
 import { pathSearch, pathKeywordSearch } from "../../search/path.js";
-import { fusionMergeWithPathBoost } from "../../search/fusion.js";
+import { fusionMergeWithPathBoost, extractPathBoostTerms } from "../../search/fusion.js";
 import type { StrategyResult, StrategyName } from "../../search/fusion.js";
 import type { SearchResult } from "../../search/types.js";
 import { createLocalEmbedder } from "../../indexer/embedder.js";
@@ -110,15 +110,6 @@ function extractSymbolNames(query: string): string[] {
 /** Heuristic: check if query looks like a file path pattern (glob) */
 function isPathLike(query: string): boolean {
   return query.includes("/") || query.includes("*") || query.includes(".");
-}
-
-/** Extract terms from query for path-based boosting. */
-function extractPathBoostTerms(query: string): string[] {
-  // Split on whitespace and filter out very short tokens
-  return query
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length >= 2);
 }
 
 // ── Main query function ──────────────────────────────────────────────────────

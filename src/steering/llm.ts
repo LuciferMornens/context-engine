@@ -1,5 +1,6 @@
 import type { SearchResult } from "../search/types.js";
 import type { StrategyName } from "../search/fusion.js";
+import { PLAN_SYSTEM_PROMPT, SYNTHESIZE_SYSTEM_PROMPT } from "./prompts.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,24 +49,8 @@ const GEMINI_URL =
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
-const PLAN_SYSTEM_PROMPT = `You are a code search strategy planner. Given a user query about code, output a JSON object with:
-- "interpretation": a one-line summary of what the user is looking for
-- "strategies": an array of search strategy objects, each with:
-  - "strategy": one of "vector", "fts", "ast", "path", "dependency"
-  - "query": the optimized query string for that strategy
-  - "weight": a number 0-1 indicating importance
-  - "reason": brief explanation of why this strategy is used
-
-Choose strategies based on query type:
-- Conceptual/natural language → vector (semantic search)
-- Keywords/identifiers → fts (full-text search)
-- Symbol names (functions, classes) → ast (structural search)
-- File paths or patterns → path (path glob search)
-- Import/dependency chains → dependency
-
-Output ONLY valid JSON, no markdown.`;
-
-const SYNTHESIZE_SYSTEM_PROMPT = `You are a code search assistant. Given search results, write a brief, helpful explanation of what was found. Be concise (2-4 sentences). Reference specific files and function names. Do not use markdown.`;
+// Re-export prompts so consumers that already import from llm.ts keep working.
+export { PLAN_SYSTEM_PROMPT, SYNTHESIZE_SYSTEM_PROMPT } from "./prompts.js";
 
 // ── Gemini provider ──────────────────────────────────────────────────────────
 
@@ -210,36 +195,93 @@ export function createAnthropicProvider(apiKey: string): LLMProvider {
 // ── Keyword extraction ───────────────────────────────────────────────────────
 
 const STOP_WORDS = new Set([
+  // Interrogatives & conjunctions
   "how", "does", "what", "where", "when", "why", "which", "who", "whom",
+  // Be-verbs
   "is", "are", "was", "were", "be", "been", "being",
+  // Do-verbs
   "do", "did", "doing", "done",
+  // Articles, connectors, prepositions
   "the", "a", "an", "and", "or", "not", "no", "nor",
   "in", "on", "at", "to", "for", "of", "with", "by", "from", "about",
+  "into", "through", "between", "after", "before", "during",
+  // Pronouns & demonstratives
   "it", "its", "this", "that", "these", "those",
-  "can", "could", "should", "would", "will", "shall", "may", "might",
-  "has", "have", "had", "having",
   "i", "me", "my", "we", "our", "you", "your", "he", "she", "they",
-  "find", "show", "get", "tell",
+  // Modals
+  "can", "could", "should", "would", "will", "shall", "may", "might",
+  // Have-verbs
+  "has", "have", "had", "having",
+  // Common imperative verbs that carry no search value
+  "find", "show", "get", "tell", "look", "give", "list", "explain",
+  // Misc filler
+  "all", "any", "some", "each", "every", "much", "many", "also",
+  "just", "like", "then", "there", "here", "very", "really",
+  "use", "used", "using",
 ]);
+
+/** Pattern: tokens that look like code identifiers (camelCase, PascalCase, snake_case, UPPER_CASE). */
+const CODE_IDENT_RE = /^(?:[a-z]+(?:[A-Z][a-z]*)+|[A-Z][a-zA-Z]+|[a-z]+(?:_[a-z]+)+|[A-Z]+(?:_[A-Z]+)+)$/;
+
+/** Pattern: dotted module paths like "fs.readFileSync" or "path.join". */
+const DOTTED_IDENT_RE = /[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+/g;
 
 /**
  * Extract meaningful search terms from a natural language query.
- * Removes common English stop words and special characters,
- * preserving code-relevant identifiers.
+ *
+ * Handles:
+ * - Natural language stop-word removal
+ * - Preservation of code identifiers (camelCase, snake_case, PascalCase)
+ * - Dotted paths (e.g. "fs.readFileSync") kept intact
+ * - Slash-separated file paths kept intact
+ * - Deduplication while preserving order
  */
 export function extractSearchTerms(query: string): string {
-  const words = query
-    .replace(/[^a-zA-Z0-9_\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length >= 2 && !STOP_WORDS.has(w.toLowerCase()));
+  const terms: string[] = [];
+  const seen = new Set<string>();
 
-  // If all words were stop words, fall back to the longest word from the original
-  if (words.length === 0) {
-    const allWords = query.replace(/[^a-zA-Z0-9_\s]/g, " ").split(/\s+/).filter((w) => w.length >= 2);
-    return allWords.sort((a, b) => b.length - a.length)[0] ?? query;
+  const addUnique = (term: string): void => {
+    const key = term.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      terms.push(term);
+    }
+  };
+
+  // 1. Extract dotted identifiers before they get split (e.g. "fs.readFileSync")
+  const dottedMatches = query.match(DOTTED_IDENT_RE) ?? [];
+  for (const m of dottedMatches) addUnique(m);
+
+  // 2. Extract path-like tokens (contain "/")
+  const pathTokens = query.split(/\s+/).filter((t) => t.includes("/"));
+  for (const p of pathTokens) addUnique(p.replace(/[?!,;]+$/g, ""));
+
+  // 3. Tokenise the rest: replace special chars (but keep _ for identifiers) and split
+  const words = query
+    .replace(/[^a-zA-Z0-9_.\s/-]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 2);
+
+  for (const w of words) {
+    const lower = w.toLowerCase();
+    // Skip if already captured as dotted or path
+    if (seen.has(lower)) continue;
+    // Skip stop words — but only when the token is NOT a code identifier
+    if (STOP_WORDS.has(lower) && !CODE_IDENT_RE.test(w)) continue;
+    addUnique(w);
   }
 
-  return words.join(" ");
+  // 4. Fallback: if everything was filtered, take the longest original word
+  if (terms.length === 0) {
+    const allWords = query
+      .replace(/[^a-zA-Z0-9_\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 2);
+    const longest = allWords.sort((a, b) => b.length - a.length)[0];
+    return longest ?? query;
+  }
+
+  return terms.join(" ");
 }
 
 // ── Plan step ────────────────────────────────────────────────────────────────
