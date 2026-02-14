@@ -62,6 +62,19 @@ export interface ChunkRecord {
   hash: string;
 }
 
+export interface ChunkWithFile {
+  id: number;
+  fileId: number;
+  filePath: string;
+  language: string;
+  lineStart: number;
+  lineEnd: number;
+  type: string;
+  name: string | null;
+  parent: string | null;
+  text: string;
+}
+
 export interface FTSResult {
   chunkId: number;
   name: string | null;
@@ -78,6 +91,7 @@ export interface KontextDatabase {
   // Chunks
   insertChunks(fileId: number, chunks: ChunkInput[]): number[];
   getChunksByFile(fileId: number): ChunkRecord[];
+  getChunksByIds(ids: number[]): ChunkWithFile[];
   deleteChunksByFile(fileId: number): void;
 
   // Vectors
@@ -266,6 +280,22 @@ export function createDatabase(
         imports: JSON.parse(r.imports) as string[],
         exports: r.exports === 1,
       }));
+    },
+
+    getChunksByIds(ids: number[]): ChunkWithFile[] {
+      if (ids.length === 0) return [];
+      const placeholders = ids.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT c.id, c.file_id as fileId, f.path as filePath, f.language,
+                  c.line_start as lineStart, c.line_end as lineEnd,
+                  c.type, c.name, c.parent, c.text
+           FROM chunks c
+           JOIN files f ON f.id = c.file_id
+           WHERE c.id IN (${placeholders})`,
+        )
+        .all(...ids) as ChunkWithFile[];
+      return rows;
     },
 
     deleteChunksByFile(fileId: number): void {
