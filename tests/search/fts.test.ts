@@ -270,6 +270,30 @@ describe("ftsSearch", () => {
       expect(results.length).toBeGreaterThan(0);
     });
 
+    it("does not crash on slash characters", () => {
+      seedTestData();
+
+      expect(() => ftsSearch(db, "src/search/", 10)).not.toThrow();
+    });
+
+    it("does not crash on dot characters", () => {
+      seedTestData();
+
+      expect(() => ftsSearch(db, "fs.readFileSync", 10)).not.toThrow();
+    });
+
+    it("does not crash on at-sign characters", () => {
+      seedTestData();
+
+      expect(() => ftsSearch(db, "@decorator", 10)).not.toThrow();
+    });
+
+    it("does not crash on ampersand operators", () => {
+      seedTestData();
+
+      expect(() => ftsSearch(db, "a && b", 10)).not.toThrow();
+    });
+
     it("preserves prefix wildcard (*) at end of word", () => {
       seedTestData();
 
@@ -345,5 +369,21 @@ describe("sanitizeFtsQuery", () => {
 
   it("handles backslashes", () => {
     expect(sanitizeFtsQuery("path\\to\\file")).toBe("path to file");
+  });
+
+  it("handles forward slashes", () => {
+    expect(sanitizeFtsQuery("src/search/")).toBe("src search");
+  });
+
+  it("handles periods", () => {
+    expect(sanitizeFtsQuery("fs.readFileSync")).toBe("fs readFileSync");
+  });
+
+  it("handles at-sign", () => {
+    expect(sanitizeFtsQuery("@decorator")).toBe("decorator");
+  });
+
+  it("handles ampersands", () => {
+    expect(sanitizeFtsQuery("a && b")).toBe("a b");
   });
 });

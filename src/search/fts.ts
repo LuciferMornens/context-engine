@@ -7,22 +7,26 @@ export type { SearchResult, SearchFilters } from "./types.js";
 
 /**
  * Sanitize a query string for safe use with FTS5 MATCH syntax.
- * Strips special FTS5 operator characters while preserving:
- * - Alphanumeric characters, underscores
+ * Uses a whitelist to preserve only:
+ * - ASCII alphanumeric characters, underscores
  * - Trailing `*` on words (prefix search, e.g. "auth*")
  * - Spaces between terms
  */
 export function sanitizeFtsQuery(query: string): string {
-  return (
-    query
-      // Strip FTS5 special syntax characters
-      .replace(/[?()":^~{}!+\-\\]/g, " ")
-      // Remove standalone * (not preceded by a word character)
-      .replace(/(?<!\w)\*/g, " ")
-      // Collapse multiple spaces
-      .replace(/\s+/g, " ")
-      .trim()
-  );
+  const tokenized = query.replace(/[^A-Za-z0-9_*]+/g, " ").trim();
+  if (tokenized.length === 0) return "";
+
+  const sanitizedTerms = tokenized
+    .split(/\s+/)
+    .map((term) => {
+      const hasTrailingWildcard = /\*+$/.test(term);
+      const base = term.replace(/\*/g, "");
+      if (base.length === 0) return "";
+      return hasTrailingWildcard ? `${base}*` : base;
+    })
+    .filter((term) => term.length > 0);
+
+  return sanitizedTerms.join(" ");
 }
 
 // ── Score normalization ──────────────────────────────────────────────────────
