@@ -85,6 +85,10 @@ export function createGeminiProvider(apiKey: string): LLMProvider {
 
       const body: Record<string, unknown> = {
         contents: nonSystemContents,
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 6000,
+        },
       };
 
       if (systemInstruction) {
@@ -131,6 +135,8 @@ export function createOpenAIProvider(apiKey: string): LLMProvider {
             role: m.role,
             content: m.content,
           })),
+          temperature: 0.1,
+          max_completion_tokens: 6000,
         }),
       });
 
@@ -161,7 +167,8 @@ export function createAnthropicProvider(apiKey: string): LLMProvider {
 
       const body: Record<string, unknown> = {
         model: "claude-3-5-haiku-20241022",
-        max_tokens: 1024,
+        max_tokens: 6000,
+        temperature: 0.1,
         messages: nonSystemMessages,
       };
 
