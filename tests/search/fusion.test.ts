@@ -497,6 +497,76 @@ describe("fusionMergeWithPathBoost", () => {
     });
   });
 
+  describe("test file deprioritization", () => {
+    it("penalizes test files when non-test results exist", () => {
+      const input: StrategyResult[] = [
+        {
+          strategy: "fts",
+          weight: 1.0,
+          results: [
+            makeResultEx(1, {
+              name: "tmpDir",
+              filePath: "tests/indexer/incremental.test.ts",
+              type: "constant",
+            }),
+            makeResultEx(2, {
+              name: "runIndexer",
+              filePath: "src/indexer/runner.ts",
+              type: "function",
+            }),
+          ],
+        },
+      ];
+
+      const results = fusionMergeWithPathBoost(input, 10, ["indexer"]);
+
+      // Even with path boost on the test file, production code should rank above it.
+      expect(results[0].chunkId).toBe(2);
+      expect(results[0].filePath).toBe("src/indexer/runner.ts");
+    });
+
+    it("does NOT penalize when all results are test files", () => {
+      const input: StrategyResult[] = [
+        {
+          strategy: "fts",
+          weight: 1.0,
+          results: [
+            makeResultEx(1, { name: "a", filePath: "tests/indexer/a.test.ts" }),
+            makeResultEx(2, { name: "b", filePath: "src/__tests__/indexer.spec.ts" }),
+          ],
+        },
+      ];
+
+      const results = fusionMergeWithPathBoost(input, 10, []);
+
+      expect(results[0].score).toBe(1.0);
+      expect(results).toHaveLength(2);
+    });
+
+    it("matches __tests__ directories and *.spec.ts filenames", () => {
+      const input: StrategyResult[] = [
+        {
+          strategy: "fts",
+          weight: 1.0,
+          results: [
+            makeResultEx(1, { name: "suite", filePath: "src/__tests__/indexer.ts" }),
+            makeResultEx(2, { name: "core", filePath: "src/indexer/core.ts" }),
+            makeResultEx(3, { name: "specCase", filePath: "src/indexer/parser.spec.ts" }),
+          ],
+        },
+      ];
+
+      const results = fusionMergeWithPathBoost(input, 10, []);
+      const nonTest = results.find((r) => r.chunkId === 2);
+      const tests = results.filter((r) => r.chunkId !== 2);
+
+      expect(nonTest).toBeDefined();
+      for (const testResult of tests) {
+        expect(testResult.score).toBeLessThan(nonTest?.score ?? 0);
+      }
+    });
+  });
+
   describe("re-normalization", () => {
     it("scores are normalized to 0-1 after boosting", () => {
       const input: StrategyResult[] = [

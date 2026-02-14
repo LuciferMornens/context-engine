@@ -70,6 +70,10 @@ const PATH_BOOST_FILENAME = 1.4;
 const PATH_BOOST_PARTIAL = 1.2;
 
 const IMPORT_PENALTY = 0.5;
+const TEST_FILE_PENALTY = 0.65;
+
+const TEST_FILE_DIRECTORY_PATTERN = /(?:^|\/)(?:tests|__tests__)(?:\/|$)/;
+const TEST_FILE_NAME_PATTERN = /(?:^|\/)[^/]*\.(?:test|spec)\.[cm]?[jt]sx?$/;
 
 // ── Path boost term extraction ───────────────────────────────────────────────
 
@@ -81,12 +85,13 @@ export function extractPathBoostTerms(query: string): string[] {
     .filter((t) => t.length >= 2);
 }
 
-// ── Fusion with path boost + import deprioritization ─────────────────────────
+// ── Fusion with path boost + deprioritization ────────────────────────────────
 
 /**
  * Merge results with RRF, then apply:
  * 1. Path-based boosting for results matching boost terms
  * 2. Import chunk deprioritization when non-import alternatives exist
+ * 3. Test file deprioritization when non-test alternatives exist
  * Re-normalizes scores to 0–1 after all adjustments.
  */
 export function fusionMergeWithPathBoost(
@@ -102,8 +107,9 @@ export function fusionMergeWithPathBoost(
   // 1. Apply path boost
   const boosted = applyPathBoost(fused, pathBoostTerms);
 
-  // 2. Apply import deprioritization
-  const adjusted = applyImportDeprioritization(boosted);
+  // 2. Apply import + test-file deprioritization
+  const importAdjusted = applyImportDeprioritization(boosted);
+  const adjusted = applyTestFileDeprioritization(importAdjusted);
 
   // 3. Re-sort by adjusted score
   adjusted.sort((a, b) => b.score - a.score);
@@ -179,6 +185,35 @@ function applyImportDeprioritization(results: SearchResult[]): SearchResult[] {
     }
     return r;
   });
+}
+
+/** Penalize test-file chunks when non-test alternatives exist. */
+function applyTestFileDeprioritization(results: SearchResult[]): SearchResult[] {
+  const hasNonTestFile = results.some((r) => !isTestFilePath(r.filePath));
+  if (!hasNonTestFile) return results; // All test files → no penalty
+
+  const maxNonTestScore = Math.max(
+    ...results.filter((r) => !isTestFilePath(r.filePath)).map((r) => r.score),
+    0,
+  );
+
+  if (maxNonTestScore === 0) return results;
+
+  return results.map((r) => {
+    if (isTestFilePath(r.filePath)) {
+      return { ...r, score: r.score * TEST_FILE_PENALTY };
+    }
+    return r;
+  });
+}
+
+/** Identify common test file paths across JS/TS repos. */
+function isTestFilePath(filePath: string): boolean {
+  const normalizedPath = filePath.toLowerCase().replace(/\\/g, "/");
+  return (
+    TEST_FILE_DIRECTORY_PATTERN.test(normalizedPath) ||
+    TEST_FILE_NAME_PATTERN.test(normalizedPath)
+  );
 }
 
 /** Re-normalize scores so the maximum is 1.0. */
