@@ -1,23 +1,8 @@
 import type { KontextDatabase, ChunkWithFile } from "../storage/db.js";
 import type { Embedder } from "../indexer/embedder.js";
+import type { SearchResult, SearchFilters } from "./types.js";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface SearchResult {
-  chunkId: number;
-  filePath: string;
-  lineStart: number;
-  lineEnd: number;
-  name: string | null;
-  type: string;
-  text: string;
-  score: number;
-  language: string;
-}
-
-export interface SearchFilters {
-  language?: string;
-}
+export type { SearchResult, SearchFilters } from "./types.js";
 
 // ── Score normalization ──────────────────────────────────────────────────────
 
