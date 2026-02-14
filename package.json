@@ -1,5 +1,5 @@
 {
-  "name": "kontext",
+  "name": "kontext-engine",
   "version": "0.1.0",
   "description": "Context engine for AI coding agents — semantic code search via CLI",
   "type": "module",
