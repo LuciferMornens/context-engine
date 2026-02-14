@@ -259,7 +259,9 @@ const COMMON_STEMS: Record<string, string> = {
   transformer: "transform",
   transformation: "transform",
   connection: "connect",
+  connecting: "connect",
   connector: "connect",
+  migrating: "migrate",
   migration: "migrate",
   scheduling: "schedule",
   scheduler: "schedule",
@@ -269,6 +271,7 @@ const COMMON_STEMS: Record<string, string> = {
   router: "route",
   indexing: "index",
   indexer: "index",
+  subscribing: "subscribe",
 };
 
 const STEM_SUFFIXES = [

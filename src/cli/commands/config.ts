@@ -179,6 +179,23 @@ function setNestedValue(obj: Record<string, unknown>, key: string, value: unknow
   current[parts[parts.length - 1]] = value;
 }
 
+function hasNestedKey(obj: Record<string, unknown>, key: string): boolean {
+  const parts = key.split(".");
+  let current: unknown = obj;
+
+  for (const part of parts) {
+    if (current === null || current === undefined || typeof current !== "object") {
+      return false;
+    }
+    if (!(part in (current as Record<string, unknown>))) {
+      return false;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+
+  return true;
+}
+
 function parseValue(rawValue: string): unknown {
   // Handle null
   if (rawValue === "null") return null;
@@ -244,10 +261,30 @@ export function runConfigSet(
   writeConfig(ctxDir, config);
 }
 
-/** Reset all configuration to defaults. */
-export function runConfigReset(projectPath: string): void {
+/** Reset all configuration to defaults, or a specific dot-notation key. */
+export function runConfigReset(projectPath: string, key?: string): void {
   const ctxDir = resolveCtxDir(projectPath);
-  writeConfig(ctxDir, structuredClone(DEFAULT_CONFIG));
+
+  if (!key) {
+    writeConfig(ctxDir, structuredClone(DEFAULT_CONFIG));
+    return;
+  }
+
+  if (!hasNestedKey(DEFAULT_CONFIG as unknown as Record<string, unknown>, key)) {
+    throw new ConfigError(`Invalid config key: ${key}`, ErrorCode.CONFIG_INVALID);
+  }
+
+  const config = readConfig(ctxDir);
+  const defaultValue = getNestedValue(
+    DEFAULT_CONFIG as unknown as Record<string, unknown>,
+    key,
+  );
+  setNestedValue(
+    config as unknown as Record<string, unknown>,
+    key,
+    structuredClone(defaultValue),
+  );
+  writeConfig(ctxDir, config);
 }
 
 // ── CLI registration ─────────────────────────────────────────────────────────
@@ -302,12 +339,16 @@ export function registerConfigCommand(program: Command): void {
     });
 
   cmd
-    .command("reset")
-    .description("Reset configuration to defaults")
-    .action(() => {
+    .command("reset [key]")
+    .description("Reset configuration to defaults or reset a specific key")
+    .action((key?: string) => {
       try {
-        runConfigReset(process.cwd());
-        console.log("Configuration reset to defaults.");
+        runConfigReset(process.cwd(), key);
+        if (key) {
+          console.log(`Reset ${key} to default.`);
+        } else {
+          console.log("Configuration reset to defaults.");
+        }
       } catch (err) {
         configErrorHandler(err);
       }

@@ -104,12 +104,6 @@ async function reindexChanges(
     const label = change.type === "add" ? "Added" : "Changed";
     log(`[${timestamp()}] ${label}: ${change.path}`);
 
-    // Delete old chunks for this file
-    const existingFile = db.getFile(change.path);
-    if (existingFile) {
-      db.deleteChunksByFile(existingFile.id);
-    }
-
     // Parse
     let nodes;
     try {
@@ -126,29 +120,37 @@ async function reindexChanges(
     const hash = await hashFile(absolutePath);
     const size = fs.statSync(absolutePath).size;
 
-    // Upsert file record
-    const fileId = db.upsertFile({
-      path: change.path,
-      language,
-      hash,
-      size,
-    });
+    const chunkRows = chunks.map((c) => ({
+      lineStart: c.lineStart,
+      lineEnd: c.lineEnd,
+      type: c.type,
+      name: c.name,
+      parent: c.parent,
+      text: c.text,
+      imports: c.imports,
+      exports: c.exports,
+      hash: c.hash,
+    }));
 
-    // Insert chunks
-    const chunkIds = db.insertChunks(
-      fileId,
-      chunks.map((c) => ({
-        lineStart: c.lineStart,
-        lineEnd: c.lineEnd,
-        type: c.type,
-        name: c.name,
-        parent: c.parent,
-        text: c.text,
-        imports: c.imports,
-        exports: c.exports,
-        hash: c.hash,
-      })),
-    );
+    let chunkIds: number[] = [];
+
+    // Replace file chunks atomically so modified-file re-indexing cannot
+    // interleave deletes/inserts across batches.
+    db.transaction(() => {
+      const existingFile = db.getFile(change.path);
+      if (existingFile) {
+        db.deleteChunksByFile(existingFile.id);
+      }
+
+      const fileId = db.upsertFile({
+        path: change.path,
+        language,
+        hash,
+        size,
+      });
+
+      chunkIds = db.insertChunks(fileId, chunkRows);
+    });
 
     for (let i = 0; i < chunks.length; i++) {
       allChunksWithMeta.push({
@@ -234,6 +236,7 @@ export async function runWatch(
 
   // Create watcher
   let watcherHandle: WatcherHandle | null = null;
+  let reindexQueue: Promise<void> = Promise.resolve();
 
   const watcher = createWatcher(
     {
@@ -243,7 +246,7 @@ export async function runWatch(
     },
     {
       onChange: (changes: FileChange[]) => {
-        void (async () => {
+        reindexQueue = reindexQueue.then(async () => {
           try {
             const result = await reindexChanges(db, changes, absoluteRoot, {
               skipEmbedding: options.skipEmbedding,
@@ -260,7 +263,7 @@ export async function runWatch(
               `[${timestamp()}] Error: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
-        })();
+        });
       },
       onError: (err) => {
         log(`[${timestamp()}] Watcher error: ${err.message}`);
@@ -280,6 +283,7 @@ export async function runWatch(
         await watcherHandle.stop();
         watcherHandle = null;
       }
+      await reindexQueue;
       db.close();
       log("Stopped watching. Database saved.");
     },

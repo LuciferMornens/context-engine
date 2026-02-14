@@ -484,4 +484,20 @@ describe("extractSearchTerms", () => {
     expect(result.toLowerCase()).toContain("renderer");
     expect(result.toLowerCase()).toContain("render");
   });
+
+  it("covers connection and migration stem variants", () => {
+    const result = extractSearchTerms(
+      "connecting connection migrating migration subscriber subscribing",
+    );
+    const lower = result.toLowerCase();
+
+    expect(lower).toContain("connecting");
+    expect(lower).toContain("connection");
+    expect(lower).toContain("migrating");
+    expect(lower).toContain("migration");
+    expect(lower).toContain("subscribing");
+    expect(lower).toContain("subscribe");
+    expect(lower).toContain("connect");
+    expect(lower).toContain("migrate");
+  });
 });

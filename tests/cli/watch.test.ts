@@ -112,6 +112,35 @@ describe("ctx watch", () => {
     expect(logs.some((l) => l.includes("Re-indexed") || l.includes("Deleted"))).toBe(true);
   });
 
+  it("re-indexes when a file is modified without foreign key errors", async () => {
+    const root = setup();
+    await runInit(root, { log: () => undefined, skipEmbedding: true });
+
+    const logs: string[] = [];
+    watchHandle = await runWatch(root, {
+      debounceMs: 100,
+      log: (msg) => logs.push(msg),
+      skipEmbedding: true,
+    });
+
+    await sleep(200);
+
+    fs.writeFileSync(
+      path.join(root, "src", "app.ts"),
+      `export function greet(name: string): string {
+  const trimmed = name.trim();
+  return "Hello " + trimmed + "!";
+}
+`,
+    );
+
+    await sleep(700);
+
+    expect(logs.some((l) => l.includes("Changed: src/app.ts"))).toBe(true);
+    expect(logs.some((l) => l.includes("Re-indexed"))).toBe(true);
+    expect(logs.some((l) => /FOREIGN KEY constraint failed/i.test(l))).toBe(false);
+  });
+
   it("--init flag triggers initialization", async () => {
     const root = setup();
     // Don't call runInit — no .ctx/ exists

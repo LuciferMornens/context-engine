@@ -133,6 +133,24 @@ describe("files", () => {
     expect(file?.size).toBe(200);
   });
 
+  it("returns the same file id when upserting an existing file", () => {
+    const firstId = db.upsertFile({
+      path: "src/auth.ts",
+      language: "typescript",
+      hash: "v1",
+      size: 100,
+    });
+
+    const secondId = db.upsertFile({
+      path: "src/auth.ts",
+      language: "typescript",
+      hash: "v2",
+      size: 200,
+    });
+
+    expect(secondId).toBe(firstId);
+  });
+
   it("deletes a file", () => {
     db.upsertFile({
       path: "src/auth.ts",

@@ -203,5 +203,25 @@ describe("ctx config", () => {
       const config = JSON.parse(raw) as KontextConfig;
       expect(config.search.defaultLimit).toBe(DEFAULT_CONFIG.search.defaultLimit);
     });
+
+    it("resets only the requested key when key is provided", () => {
+      const root = setupWithConfig();
+      runConfigSet(root, "search.defaultLimit", "50");
+      runConfigSet(root, "watch.debounceMs", "2000");
+
+      runConfigReset(root, "search.defaultLimit");
+
+      expect(runConfigGet(root, "search.defaultLimit")).toBe(
+        DEFAULT_CONFIG.search.defaultLimit,
+      );
+      expect(runConfigGet(root, "watch.debounceMs")).toBe(2000);
+    });
+
+    it("throws for unknown reset key", () => {
+      const root = setupWithConfig();
+      expect(() => runConfigReset(root, "search.unknown")).toThrow(
+        /invalid config key/i,
+      );
+    });
   });
 });

@@ -182,6 +182,7 @@ export function createDatabase(
       hash = excluded.hash,
       last_indexed = excluded.last_indexed,
       size = excluded.size
+    RETURNING id
   `);
 
   const stmtGetFile = db.prepare(
@@ -240,19 +241,22 @@ export function createDatabase(
 
   return {
     upsertFile(file: FileInput): number {
-      const result = stmtUpsertFile.run({
+      const row = stmtUpsertFile.get({
         path: file.path,
         language: file.language,
         hash: file.hash,
         lastIndexed: Date.now(),
         size: file.size,
-      });
-      if (result.changes > 0 && result.lastInsertRowid) {
-        return Number(result.lastInsertRowid);
+      }) as { id: number } | undefined;
+
+      if (!row?.id) {
+        throw new DatabaseError(
+          `Failed to upsert file: ${file.path}`,
+          ErrorCode.DB_WRITE_FAILED,
+        );
       }
-      // On update, fetch the id
-      const existing = stmtGetFile.get(file.path) as FileRecord | undefined;
-      return existing?.id ?? 0;
+
+      return row.id;
     },
 
     getFile(filePath: string): FileRecord | null {
@@ -304,17 +308,19 @@ export function createDatabase(
     },
 
     deleteFile(filePath: string): void {
-      // Get chunk ids first for vector cleanup
-      const file = stmtGetFile.get(filePath) as FileRecord | undefined;
-      if (file) {
-        const chunkRows = stmtGetChunkIdsByFile.all(file.id) as { id: number }[];
-        const chunkIds = chunkRows.map((r) => r.id);
-        if (chunkIds.length > 0) {
-          deleteVectorsByChunkIds(db, chunkIds);
+      db.transaction(() => {
+        // Get chunk ids first for vector cleanup
+        const file = stmtGetFile.get(filePath) as FileRecord | undefined;
+        if (file) {
+          const chunkRows = stmtGetChunkIdsByFile.all(file.id) as { id: number }[];
+          const chunkIds = chunkRows.map((r) => r.id);
+          if (chunkIds.length > 0) {
+            deleteVectorsByChunkIds(db, chunkIds);
+          }
         }
-      }
-      // CASCADE will handle chunks and FTS triggers
-      stmtDeleteFile.run(filePath);
+        // CASCADE will handle chunks and FTS triggers
+        stmtDeleteFile.run(filePath);
+      })();
     },
 
     insertChunks(fileId: number, chunks: ChunkInput[]): number[] {
@@ -460,12 +466,14 @@ export function createDatabase(
     },
 
     deleteChunksByFile(fileId: number): void {
-      const chunkRows = stmtGetChunkIdsByFile.all(fileId) as { id: number }[];
-      const chunkIds = chunkRows.map((r) => r.id);
-      if (chunkIds.length > 0) {
-        deleteVectorsByChunkIds(db, chunkIds);
-      }
-      stmtDeleteChunksByFile.run(fileId);
+      db.transaction(() => {
+        const chunkRows = stmtGetChunkIdsByFile.all(fileId) as { id: number }[];
+        const chunkIds = chunkRows.map((r) => r.id);
+        if (chunkIds.length > 0) {
+          deleteVectorsByChunkIds(db, chunkIds);
+        }
+        stmtDeleteChunksByFile.run(fileId);
+      })();
     },
 
     insertDependency(sourceChunkId: number, targetChunkId: number, type: string): void {
