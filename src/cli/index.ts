@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { registerInitCommand } from "./commands/init.js";
+import { registerQueryCommand } from "./commands/query.js";
 import { registerFindCommand } from "./commands/find.js";
 import { registerUpdateCommand } from "./commands/update.js";
 import { registerWatchCommand } from "./commands/watch.js";
@@ -18,6 +19,7 @@ program
   .version("0.1.0");
 
 registerInitCommand(program);
+registerQueryCommand(program);
 registerFindCommand(program);
 registerUpdateCommand(program);
 registerWatchCommand(program);
