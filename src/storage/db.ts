@@ -87,6 +87,9 @@ export interface KontextDatabase {
   // FTS
   searchFTS(query: string, limit: number): FTSResult[];
 
+  // All file paths (for incremental diff)
+  getAllFilePaths(): string[];
+
   // Transactions
   transaction<T>(fn: () => T): T;
 
@@ -202,6 +205,11 @@ export function createDatabase(
         }
       }
       return result;
+    },
+
+    getAllFilePaths(): string[] {
+      const rows = stmtGetAllFiles.all() as FileRecord[];
+      return rows.map((r) => r.path);
     },
 
     deleteFile(filePath: string): void {
