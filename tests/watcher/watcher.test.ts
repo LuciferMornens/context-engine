@@ -101,10 +101,12 @@ describe("createWatcher", () => {
     );
 
     await handle.start();
+    // Let watcher stabilize
+    await sleep(100);
 
     // Delete existing file
     fs.unlinkSync(path.join(root, "src", "existing.ts"));
-    await sleep(400);
+    await sleep(500);
 
     expect(changes.some((c) => c.type === "unlink" && c.path.includes("existing.ts"))).toBe(true);
   });

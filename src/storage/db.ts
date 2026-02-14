@@ -10,6 +10,7 @@ import {
   SCHEMA_VERSION as SCHEMA_V,
 } from "./schema.js";
 import {
+  getVectorCount,
   insertVector as vecInsert,
   deleteVectorsByChunkIds,
   searchVectors as vecSearch,
@@ -120,6 +121,13 @@ export interface KontextDatabase {
   // All file paths (for incremental diff)
   getAllFilePaths(): string[];
 
+  // Stats
+  getFileCount(): number;
+  getChunkCount(): number;
+  getVectorCount(): number;
+  getLanguageBreakdown(): Map<string, number>;
+  getLastIndexed(): string | null;
+
   // Transactions
   transaction<T>(fn: () => T): T;
 
@@ -213,6 +221,15 @@ export function createDatabase(
     "SELECT source_chunk_id as sourceChunkId, type FROM dependencies WHERE target_chunk_id = ?",
   );
 
+  const stmtFileCount = db.prepare("SELECT COUNT(*) as count FROM files");
+  const stmtChunkCount = db.prepare("SELECT COUNT(*) as count FROM chunks");
+  const stmtLanguageBreakdown = db.prepare(
+    "SELECT language, COUNT(*) as count FROM files GROUP BY language ORDER BY count DESC",
+  );
+  const stmtLastIndexed = db.prepare(
+    "SELECT MAX(last_indexed) as lastIndexed FROM files",
+  );
+
   // ── Implementation ───────────────────────────────────────────────────────
 
   return {
@@ -252,6 +269,32 @@ export function createDatabase(
     getAllFilePaths(): string[] {
       const rows = stmtGetAllFiles.all() as FileRecord[];
       return rows.map((r) => r.path);
+    },
+
+    getFileCount(): number {
+      return (stmtFileCount.get() as { count: number }).count;
+    },
+
+    getChunkCount(): number {
+      return (stmtChunkCount.get() as { count: number }).count;
+    },
+
+    getVectorCount(): number {
+      return getVectorCount(db);
+    },
+
+    getLanguageBreakdown(): Map<string, number> {
+      const rows = stmtLanguageBreakdown.all() as { language: string; count: number }[];
+      const map = new Map<string, number>();
+      for (const row of rows) {
+        map.set(row.language, row.count);
+      }
+      return map;
+    },
+
+    getLastIndexed(): string | null {
+      const row = stmtLastIndexed.get() as { lastIndexed: string | null };
+      return row.lastIndexed;
     },
 
     deleteFile(filePath: string): void {

@@ -37,6 +37,13 @@ export function deleteVectorsByChunkIds(
   ).run(...chunkIds);
 }
 
+export function getVectorCount(db: BetterSqlite3.Database): number {
+  const row = db.prepare("SELECT COUNT(*) as count FROM chunk_vectors").get() as {
+    count: number;
+  };
+  return row.count;
+}
+
 export function searchVectors(
   db: BetterSqlite3.Database,
   query: Float32Array,
