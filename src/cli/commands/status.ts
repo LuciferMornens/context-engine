@@ -39,6 +39,13 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatTimestamp(raw: string): string {
+  const num = Number(raw);
+  if (Number.isNaN(num)) return raw;
+  const date = new Date(num);
+  return date.toISOString().replace("T", " ").replace(/\.\d+Z$/, "");
+}
+
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -79,7 +86,7 @@ function formatStatus(projectPath: string, output: StatusOutput): string {
   ];
 
   if (output.lastIndexed) {
-    lines.push(`  Last indexed: ${output.lastIndexed}`);
+    lines.push(`  Last indexed: ${formatTimestamp(output.lastIndexed)}`);
   }
 
   lines.push("");
