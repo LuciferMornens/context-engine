@@ -277,6 +277,39 @@ describe("chunks", () => {
     const chunks = db.getChunksByFile(fileId);
     expect(chunks).toHaveLength(0);
   });
+
+  it("returns chunks missing vectors", () => {
+    const ids = db.insertChunks(fileId, [
+      {
+        lineStart: 1,
+        lineEnd: 5,
+        type: "function",
+        name: "withVector",
+        parent: null,
+        text: "function withVector() {}",
+        imports: [],
+        exports: false,
+        hash: "hv",
+      },
+      {
+        lineStart: 6,
+        lineEnd: 10,
+        type: "function",
+        name: "withoutVector",
+        parent: null,
+        text: "function withoutVector() {}",
+        imports: [],
+        exports: false,
+        hash: "hnv",
+      },
+    ]);
+
+    db.insertVector(ids[0], new Float32Array(384).fill(0.2));
+
+    const missing = db.getChunksMissingVectors();
+    expect(missing.map((c) => c.id)).toContain(ids[1]);
+    expect(missing.map((c) => c.id)).not.toContain(ids[0]);
+  });
 });
 
 // ── CASCADE delete ───────────────────────────────────────────────────────────

@@ -110,6 +110,7 @@ export interface KontextDatabase {
   insertChunks(fileId: number, chunks: ChunkInput[]): number[];
   getChunksByFile(fileId: number): ChunkRecord[];
   getChunksByIds(ids: number[]): ChunkWithFile[];
+  getChunksMissingVectors(): ChunkWithFile[];
   deleteChunksByFile(fileId: number): void;
 
   // Dependencies
@@ -211,6 +212,16 @@ export function createDatabase(
 
   const stmtGetChunksByFile = db.prepare(
     "SELECT id, file_id as fileId, line_start as lineStart, line_end as lineEnd, type, name, parent, text, imports, exports, hash FROM chunks WHERE file_id = ? ORDER BY line_start",
+  );
+  const stmtGetChunksMissingVectors = db.prepare(
+    `SELECT c.id, c.file_id as fileId, f.path as filePath, f.language,
+            c.line_start as lineStart, c.line_end as lineEnd,
+            c.type, c.name, c.parent, c.text, c.exports as exports
+     FROM chunks c
+     JOIN files f ON f.id = c.file_id
+     LEFT JOIN chunk_vectors v ON v.rowid = c.id
+     WHERE v.rowid IS NULL
+     ORDER BY c.id`,
   );
 
   const stmtGetChunkIdsByFile = db.prepare(
@@ -395,6 +406,26 @@ export function createDatabase(
            WHERE c.id IN (${placeholders})`,
         )
         .all(...ids) as {
+        id: number;
+        fileId: number;
+        filePath: string;
+        language: string;
+        lineStart: number;
+        lineEnd: number;
+        type: string;
+        name: string | null;
+        parent: string | null;
+        text: string;
+        exports: number;
+      }[];
+      return rows.map((r) => ({
+        ...r,
+        exports: r.exports === 1,
+      }));
+    },
+
+    getChunksMissingVectors(): ChunkWithFile[] {
+      const rows = stmtGetChunksMissingVectors.all() as {
         id: number;
         fileId: number;
         filePath: string;

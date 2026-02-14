@@ -1,13 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import BetterSqlite3 from "better-sqlite3";
 import { runInit } from "../../src/cli/commands/init.js";
+import { createDatabase } from "../../src/storage/db.js";
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
 let tmpDir: string;
+const originalFetch = globalThis.fetch;
+const originalVoyageKey = process.env["CTX_VOYAGE_KEY"];
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "kontext-init-"));
@@ -15,6 +18,13 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
+  globalThis.fetch = originalFetch;
+  vi.restoreAllMocks();
+  if (originalVoyageKey) {
+    process.env["CTX_VOYAGE_KEY"] = originalVoyageKey;
+  } else {
+    delete process.env["CTX_VOYAGE_KEY"];
+  }
 });
 
 function writeFixture(name: string, content: string): void {
@@ -55,6 +65,64 @@ export const MAX_RETRIES = 3;
 export { formatDate } from "./utils";
 `,
   );
+}
+
+function createLargeFixtureProject(functionCount: number): void {
+  let content = "";
+  for (let i = 0; i < functionCount; i++) {
+    content += `export function fn${i}(input: string): string {\n`;
+    content += `  return input + "-${i}";\n`;
+    content += "}\n\n";
+  }
+  writeFixture("src/large.ts", content);
+}
+
+function writeVoyageConfig(root: string): void {
+  const ctxDir = path.join(root, ".ctx");
+  fs.mkdirSync(ctxDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(ctxDir, "config.json"),
+    JSON.stringify({
+      embedder: {
+        provider: "voyage",
+        model: "voyage-code-3",
+        dimensions: 1024,
+      },
+      search: {
+        defaultLimit: 10,
+        strategies: ["vector", "fts", "ast", "path"],
+        weights: { vector: 1.0, fts: 0.8, ast: 0.9, path: 0.7, dependency: 0.6 },
+      },
+      watch: {
+        debounceMs: 500,
+        ignored: [],
+      },
+      llm: {
+        provider: null,
+        model: null,
+      },
+    }, null, 2),
+  );
+}
+
+function mockEmbeddingApiResponse(inputSize: number): {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  json: () => Promise<{ data: { embedding: number[] }[] }>;
+  text: () => Promise<string>;
+} {
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    json: async () => ({
+      data: Array.from({ length: inputSize }, () => ({
+        embedding: Array.from({ length: 1024 }, () => 0.01),
+      })),
+    }),
+    text: async () => "",
+  };
 }
 
 // ── Capture output ───────────────────────────────────────────────────────────
@@ -277,6 +345,102 @@ export function validateToken(token: string): boolean {
       } else {
         delete process.env["CTX_VOYAGE_KEY"];
       }
+    }
+  });
+
+  it("saves partial vectors when a later embedding batch fails", async () => {
+    createLargeFixtureProject(300);
+    writeVoyageConfig(tmpDir);
+    process.env["CTX_VOYAGE_KEY"] = "test-key";
+
+    let successfulBatches = 0;
+    globalThis.fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { input?: unknown[] };
+      const inputSize = Array.isArray(body.input) ? body.input.length : 0;
+
+      if (successfulBatches < 2) {
+        successfulBatches++;
+        return mockEmbeddingApiResponse(inputSize) as unknown as Response;
+      }
+
+      return {
+        ok: false,
+        status: 429,
+        statusText: "Too Many Requests",
+        json: async () => ({}),
+        text: async () => "rate limit",
+      } as unknown as Response;
+    });
+
+    await expect(runInit(tmpDir, { log: () => undefined })).rejects.toThrow(
+      /Run "ctx init" again to resume/i,
+    );
+
+    const db = createDatabase(path.join(tmpDir, ".ctx", "index.db"), 1024);
+    try {
+      const chunkCount = db.getChunkCount();
+      const vectorCount = db.getVectorCount();
+      expect(chunkCount).toBeGreaterThan(256);
+      expect(vectorCount).toBe(256);
+      expect(vectorCount).toBeLessThan(chunkCount);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("re-running init embeds only remaining chunks after partial failure", async () => {
+    createLargeFixtureProject(300);
+    writeVoyageConfig(tmpDir);
+    process.env["CTX_VOYAGE_KEY"] = "test-key";
+
+    let successfulBatches = 0;
+    globalThis.fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { input?: unknown[] };
+      const inputSize = Array.isArray(body.input) ? body.input.length : 0;
+
+      if (successfulBatches < 2) {
+        successfulBatches++;
+        return mockEmbeddingApiResponse(inputSize) as unknown as Response;
+      }
+
+      return {
+        ok: false,
+        status: 429,
+        statusText: "Too Many Requests",
+        json: async () => ({}),
+        text: async () => "rate limit",
+      } as unknown as Response;
+    });
+
+    await expect(runInit(tmpDir, { log: () => undefined })).rejects.toThrow();
+
+    const dbAfterFailure = createDatabase(path.join(tmpDir, ".ctx", "index.db"), 1024);
+    let remaining = 0;
+    try {
+      remaining = dbAfterFailure.getChunkCount() - dbAfterFailure.getVectorCount();
+      expect(remaining).toBeGreaterThan(0);
+    } finally {
+      dbAfterFailure.close();
+    }
+
+    let secondRunFetchCalls = 0;
+    globalThis.fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      secondRunFetchCalls++;
+      const body = JSON.parse(String(init?.body ?? "{}")) as { input?: unknown[] };
+      const inputSize = Array.isArray(body.input) ? body.input.length : 0;
+      return mockEmbeddingApiResponse(inputSize) as unknown as Response;
+    });
+
+    await expect(runInit(tmpDir, { log: () => undefined })).resolves.toBeDefined();
+
+    const dbAfterResume = createDatabase(path.join(tmpDir, ".ctx", "index.db"), 1024);
+    try {
+      const chunkCount = dbAfterResume.getChunkCount();
+      const vectorCount = dbAfterResume.getVectorCount();
+      expect(vectorCount).toBe(chunkCount);
+      expect(secondRunFetchCalls).toBe(Math.ceil(remaining / 128));
+    } finally {
+      dbAfterResume.close();
     }
   });
 });

@@ -56,6 +56,7 @@ const CTX_DIR = ".ctx";
 const DB_FILENAME = "index.db";
 const CONFIG_FILENAME = "config.json";
 const GITIGNORE_ENTRY = ".ctx/";
+const EMBEDDING_SAVE_BATCH_SIZE = 128;
 
 // ── Gitignore management ─────────────────────────────────────────────────────
 
@@ -102,6 +103,36 @@ function formatLanguageSummary(counts: Map<string, number>): string {
     .sort((a, b) => b[1] - a[1])
     .map(([lang, count]) => `${lang}: ${count}`);
   return entries.join(", ");
+}
+
+async function embedAndPersistInBatches(
+  db: ReturnType<typeof createDatabase>,
+  embedder: Embedder,
+  chunks: { id: number; filePath: string; parent: string | null; text: string }[],
+  log: (msg: string) => void,
+): Promise<number> {
+  let vectorsCreated = 0;
+  const total = chunks.length;
+
+  for (let i = 0; i < chunks.length; i += EMBEDDING_SAVE_BATCH_SIZE) {
+    const batch = chunks.slice(i, i + EMBEDDING_SAVE_BATCH_SIZE);
+    const texts = batch.map((chunk) =>
+      prepareChunkText(chunk.filePath, chunk.parent, chunk.text),
+    );
+
+    const vectors = await embedder.embed(texts);
+
+    db.transaction(() => {
+      for (let j = 0; j < batch.length; j++) {
+        db.insertVector(batch[j].id, vectors[j]);
+      }
+    });
+
+    vectorsCreated += vectors.length;
+    log(`  Embedding... ${vectorsCreated}/${total}`);
+  }
+
+  return vectorsCreated;
 }
 
 // ── Main pipeline ────────────────────────────────────────────────────────────
@@ -272,26 +303,37 @@ export async function runInit(
     // 7. Embedding
     let vectorsCreated = 0;
 
-    if (!options.skipEmbedding && allChunksWithMeta.length > 0) {
+    if (!options.skipEmbedding) {
+      const chunksMissingVectors = db.getChunksMissingVectors().map((chunk) => ({
+        id: chunk.id,
+        filePath: chunk.filePath,
+        parent: chunk.parent,
+        text: chunk.text,
+      }));
+
+      if (chunksMissingVectors.length > 0) {
+        log(`  ${chunksMissingVectors.length} chunks need embeddings`);
+      }
+
+      if (chunksMissingVectors.length > 0) {
       const embedder = await createEmbedder(absoluteRoot);
 
-      const texts = allChunksWithMeta.map((cm) =>
-        prepareChunkText(cm.fileRelPath, cm.chunk.parent, cm.chunk.text),
-      );
-
-      const vectors = await embedder.embed(texts, (done, total) => {
-        log(`  Embedding... ${done}/${total}`);
-      });
-
-      // Store vectors
-      db.transaction(() => {
-        for (let i = 0; i < allChunksWithMeta.length; i++) {
-          const chunkDbId = parseInt(allChunksWithMeta[i].chunk.id, 10);
-          db.insertVector(chunkDbId, vectors[i]);
+        try {
+          vectorsCreated = await embedAndPersistInBatches(
+            db,
+            embedder,
+            chunksMissingVectors,
+            log,
+          );
+        } catch (err) {
+          const total = chunksMissingVectors.length;
+          throw new IndexError(
+            `Embedding failed after saving ${vectorsCreated}/${total} vectors. Run "ctx init" again to resume. ${err instanceof Error ? err.message : String(err)}`,
+            ErrorCode.EMBEDDER_FAILED,
+            err instanceof Error ? err : undefined,
+          );
         }
-      });
-
-      vectorsCreated = vectors.length;
+      }
     }
 
     // 8. Summary

@@ -40,6 +40,7 @@ export interface WatchHandle {
 
 const CTX_DIR = ".ctx";
 const DB_FILENAME = "index.db";
+const EMBEDDING_SAVE_BATCH_SIZE = 128;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -178,19 +179,33 @@ async function reindexChanges(
   // Embedding (if enabled)
   if (!options.skipEmbedding && allChunksWithMeta.length > 0) {
     const embedder = await loadEmbedder(projectPath);
+    let vectorsCreated = 0;
+    const total = allChunksWithMeta.length;
 
-    const texts = allChunksWithMeta.map((cm) =>
-      prepareChunkText(cm.fileRelPath, cm.chunk.parent, cm.chunk.text),
-    );
+    try {
+      for (let i = 0; i < allChunksWithMeta.length; i += EMBEDDING_SAVE_BATCH_SIZE) {
+        const batch = allChunksWithMeta.slice(i, i + EMBEDDING_SAVE_BATCH_SIZE);
+        const texts = batch.map((cm) =>
+          prepareChunkText(cm.fileRelPath, cm.chunk.parent, cm.chunk.text),
+        );
+        const vectors = await embedder.embed(texts);
 
-    const vectors = await embedder.embed(texts);
+        db.transaction(() => {
+          for (let j = 0; j < batch.length; j++) {
+            const chunkDbId = parseInt(batch[j].chunk.id, 10);
+            db.insertVector(chunkDbId, vectors[j]);
+          }
+        });
 
-    db.transaction(() => {
-      for (let i = 0; i < allChunksWithMeta.length; i++) {
-        const chunkDbId = parseInt(allChunksWithMeta[i].chunk.id, 10);
-        db.insertVector(chunkDbId, vectors[i]);
+        vectorsCreated += vectors.length;
       }
-    });
+    } catch (err) {
+      throw new IndexError(
+        `Embedding failed after saving ${vectorsCreated}/${total} vectors. Continue watching, then run "ctx init" to backfill missing vectors. ${err instanceof Error ? err.message : String(err)}`,
+        ErrorCode.EMBEDDER_FAILED,
+        err instanceof Error ? err : undefined,
+      );
+    }
   }
 
   const durationMs = performance.now() - start;
